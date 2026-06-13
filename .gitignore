@@ -1,8 +1,43 @@
-myconf
-test.conf
+```toml
+# Rust-specific ignores
+target/
+Cargo.lock
+
+# Dependencies
+vendor/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
 .DS_Store
+Thumbs.db
 
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
 
-# Added by cargo
-
-/target
+# Build artifacts
+dist/
+build/
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.exe
+*.out
+```
