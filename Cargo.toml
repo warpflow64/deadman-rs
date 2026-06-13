@@ -4,5 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-serde = { version = "1.0.228", features = ["derive"] }
-toml  = "1.1.2"
+crossterm = "0.29.0"
+ping-async = "1.0.2"
+ratatui = "0.30.1"
+tokio = {version = "1.52.3", features = ["full"]}
