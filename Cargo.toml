@@ -1,10 +1,19 @@
 [package]
 name = "deadman-rs"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
-crossterm = "0.29.0"
-ping-async = "1.0.2"
-ratatui = "0.30.1"
-tokio = {version = "1.52.3", features = ["full"]}
+tokio      = { version = "1", features = ["full"] }
+ratatui    = "0.29"
+crossterm  = "0.28"
+serde      = { version = "1", features = ["derive"] }
+toml       = "0.8"
+# crate 名は ping-async。Rust 側では `use ping_async::...` で参照する。
+# バージョンは普段使っているものに合わせて構わない（本コードは
+# new(addr, src, ttl, timeout) / send() / status() / round_trip_time()
+# という ping-async の API を前提にしている）。
+ping-async = "1"
+
+[profile.release]
+lto = true

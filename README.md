@@ -1,58 +1,69 @@
-deadman
-=======
+# deadman-rs
 
-deadman is an observation software for host status using ping.
+設定ファイル(TOML)駆動の ICMP/Ping 監視 TUI。upa/deadman(Python) の発想を
+Rust(ratatui + tokio)へ移植したもの。グループ単位で重要度ラベルを付けて
+一覧表示し、ターゲットごとに `via` で到達確認の方法を切り替えながら、
+ライブで結果テーブル(損失率/RTT/平均/送信数/履歴スパークライン)を描画する。
 
-deadman does not have rich functionalities. It only checks host
-statuses using ICMP echo. We recomend using deadman for building
-temporary networks such as conference and event networks. This
-software was originally designed and implemented for Interop Tokyo
-ShowNet.
+## ビルドと実行
 
+    cargo build --release
+    ./target/release/deadman-rs deadman.toml
 
-![demo](https://github.com/upa/deadman/raw/master/img/deadman-demo.gif)
+オプション:
 
-How to use
-==========
+    deadman-rs [-s SCALE_MS] <config.toml>
+    -s SCALE_MS   スパークライン1段あたりの RTT(ms)。既定 10。
 
-Clone this repository and then run.
+キー操作:
 
-	$ git clone https://github.com/upa/deadman
-	$ cd deadman
-	$ ./deadman deadman.conf
+    q / Esc / Ctrl-C   終了
+    r                  全ターゲットの統計をリセット
 
+## 設定ファイル
 
-To change the targets, modify or create a config file.
+`deadman.toml` を参照。`label` 先頭の `#` の数が重要度・強調に対応する。
 
-	$ cat deadman.conf
-	google          173.194.117.176
-	googleDNS       8.8.8.8
-	---
-	kame            203.178.141.194
-	kame6           2001:200:dff:fff1:216:3eff:feb1:44d7
+    #   最重要   太字 + 下線
+    ##  重要     太字
+    ### 補助     淡色(dim)
 
-`deadman` with `-a` or `--async-mode` option sends ping to targets
-asynchronously.
+各 `[[group.target]]` の `via` で到達確認方法を選ぶ。
 
-Each line in the config file indicates a target host. Ping options,
-specifying source addresses and using netns, etc, are noted on the
-deadman.conf. For example, ping via a remote host through ssh is
-implemented.
+| via            | 動作                                            | 必須フィールド            |
+|----------------|-------------------------------------------------|---------------------------|
+| (省略)/icmp/ping | ネイティブ ICMP（ping-async）                  | address                   |
+| tcp            | TCP connect の可否と所要時間                     | address, tcp_port         |
+| ssh            | relay へ SSH し、その先から ping                 | address, relay (+user/key/os) |
+| snmp           | relay に対して snmpping                           | address, relay, community |
+| netns          | `ip netns exec <relay> ping`                     | address, relay            |
+| vrf            | `ip vrf exec <relay> ping`                       | address, relay            |
 
-	google-via-ssh  173.194.117.176 relay=X.X.X.X os=Linux
+履歴の記号:
 
-This line means sending ping to a google server via the remote server
-X.X.X.X. username and ssh-key for the remote host can be specified by
-_user=USER_, _key=KEYPATH_. Other ssh attributes follow user's
-environment executing deadman.
+    ▁▂▃▄▅▆▇█  応答あり（RTT を SCALE_MS 段階で表示）
+    X         応答なし（タイムアウト/到達不能）
+    t         ssh の接続タイムアウト
+    s         中継・コマンド自体の失敗（コマンド無し等）
 
-You can also use `---` to display the separator.
-It's useful for grouping the targets.
+## 動作上の注意
 
-Moreover, -s option indicates the scale of RTT bar graph. default is 10ms.
-
-You can send deadman a SIGHUP to have it reload its configuration file.
-When this happens, existing entries will not lose their history.
+- ICMP(ping-async): Linux では非特権 ICMP ソケットを使うため
+  `net.ipv4.ping_group_range` に実行ユーザの gid を含める必要がある。
+  例: `sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"`。
+  許可されていないと requestor の生成に失敗し、該当ホストは X が続く。
+  Windows/macOS は非特権で動作する。
+- IPv6 を ICMP で見たい場合は ping-async が IPv6 ICMP に対応している必要が
+  ある。未対応なら該当ホストは X 表示になるので、必要に応じて tcp/ssh など
+  別の via に切り替える。
+- netns / vrf: Linux 専用で root 権限が要る（`ip netns/vrf exec` のため）。
+- snmp: net-snmp 系の `snmpping` バイナリが PATH にあり、relay 側が応答する
+  ことが前提。出力の `rtt min/avg/max/stddev = ...` から avg を取る。
+- tcp: 監視対象ポートが開いている前提。接続成立までの時間を RTT として扱う。
+- 各クレートのバージョン(ping-async / ratatui など)は手元の環境に合わせて
+  Cargo.toml を調整してよい。ping-async は
+  `new(addr, src, ttl, timeout)` / `send()` / `status()` / `round_trip_time()`
+  という API を前提にしている。
 
 
 License
