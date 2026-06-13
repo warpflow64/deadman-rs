@@ -1,0 +1,87 @@
+# deadman.toml
+
+# label の # の数が重要度・表示サイズに対応
+#   #   → 最重要（障害時に最初に目に入るべきもの）
+#   ##  → 重要
+#   ### → 参考・補助的なターゲット
+
+[[group]]
+label = "# Public DNS"
+
+  [[group.target]]
+  name    = "googleDNS"
+  address = "8.8.8.8"
+
+  [[group.target]]
+  name    = "quad9"
+  address = "9.9.9.9"
+
+
+[[group]]
+label = "## Root Name Servers"
+
+  [[group.target]]
+  name    = "mroot"
+  address = "202.12.27.33"
+
+  [[group.target]]
+  name    = "kame"
+  address = "210.155.141.200"
+
+  [[group.target]]
+  name    = "mroot6"
+  address = "2001:dc3::35"
+
+  [[group.target]]
+  name    = "kame6"
+  address = "2001:2f0:0:8800::1:1"
+
+
+[[group]]
+label = "### SSH Relay"
+
+  [[group.target]]
+  name    = "google-via-ssh"
+  address = "173.194.117.176"
+  via     = "ssh"
+  relay   = "X.X.X.X"
+  os      = "Linux"
+  user    = "user"
+  key     = "/path/to/id_rsa"
+
+
+[[group]]
+label = "### SNMP"
+
+  [[group.target]]
+  name      = "googleDNS-via-snmp"
+  address   = "8.8.8.8"
+  via       = "snmp"
+  relay     = "X.X.X.X"
+  community = "public"
+
+
+[[group]]
+label = "### Netns / VRF"
+
+  [[group.target]]
+  name  = "googleDNS-via-netns"
+  address = "8.8.8.8"
+  via   = "netns"
+  relay = "netns1"
+
+  [[group.target]]
+  name  = "googleDNS-via-vrf"
+  address = "8.8.8.8"
+  via   = "vrf"
+  relay = "vrf1"
+
+
+[[group]]
+label = "### TCP Ping"
+
+  [[group.target]]
+  name     = "wide-tcp80"
+  address  = "203.178.136.59"
+  via      = "tcp"
+  tcp_port = 80
