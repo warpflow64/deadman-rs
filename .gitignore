@@ -1,2 +1,8 @@
 myconf
 test.conf
+.DS_Store
+
+
+# Added by cargo
+
+/target
