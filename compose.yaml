@@ -1,0 +1,15 @@
+services:
+  ttyd-deadman:
+    build:
+      context: .
+    container_name: ttyd-deadman
+    restart: unless-stopped
+    ports:
+      - "7681:7681"
+    cap_add:
+      - NET_RAW
+    environment:
+      TTYD_PORT: "7681"
+      DEADMAN_CONFIG: "/etc/deadman/deadman.toml"
+    volumes:
+      - ./deadman.toml:/etc/deadman/deadman.toml:ro

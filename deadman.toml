@@ -29,7 +29,7 @@
 # | Quad9 | 9.9.9.9 | セキュリティ重視の DNS |
 
 [[group]]
-label = "# 🌐 **Public DNS Servers**"
+label = "# **Public DNS Servers**"
 description = "最重要インフラ - 障害時に最初に確認"
 
   [[group.target]]
@@ -52,7 +52,7 @@ description = "最重要インフラ - 障害時に最初に確認"
 # - 複数のリージョンに分散
 
 [[group]]
-label = "## 📡 --Root Name Servers--"
+label = "## ~~Root Name Servers~~"
 description = "ルートネームサーバー - 重要"
 
   [[group.target]]
@@ -87,7 +87,7 @@ description = "ルートネームサーバー - 重要"
 # ```
 
 [[group]]
-label = "### 🔐 SSH Relay"
+label = "### SSH Relay"
 description = "SSH 経由監視 - 参考"
 
   [[group.target]]

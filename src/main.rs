@@ -59,8 +59,6 @@ struct TargetCfg {
     key: Option<String>,
     community: Option<String>,
     tcp_port: Option<u16>,
-    #[serde(default)]
-    comment: Option<String>,
 }
 
 // ---------------- ping 方式 ----------------
@@ -159,7 +157,6 @@ struct Target {
     rtt: f64,
     tot: f64,
     history: VecDeque<Outcome>, // 先頭が最新
-    comment: Option<String>,    // マークダウン対応のコメント
 }
 
 impl Target {
@@ -619,7 +616,6 @@ fn load(path: &str) -> Result<(Vec<Target>, Vec<GroupView>), String> {
                 rtt: 0.0,
                 tot: 0.0,
                 history: VecDeque::new(),
-                comment: t.comment.clone(),
             });
         }
         groups.push(GroupView {
@@ -672,6 +668,26 @@ fn local_host_info() -> String {
         .unwrap_or_else(|| "From: (unknown)".to_string())
 }
 
+// ---------------- ヘッダ行（Table 列位置に手動で合わせる）----------------
+fn header_line() -> Line<'static> {
+    let s = Style::default().add_modifier(Modifier::BOLD);
+    Line::from(vec![
+        Span::styled(format!("{:<22}", "HOSTNAME"), s),
+        Span::raw(" "),
+        Span::styled(format!("{:<26}", "ADDRESS"), s),
+        Span::raw(" "),
+        Span::styled(format!("{:<6}",  "LOSS"), s),
+        Span::raw(" "),
+        Span::styled(format!("{:<7}",  "RTT"), s),
+        Span::raw(" "),
+        Span::styled(format!("{:<7}",  "AVG"), s),
+        Span::raw(" "),
+        Span::styled(format!("{:<7}",  "SNT"), s),
+        Span::raw(" "),
+        Span::styled("HISTORY", s),
+    ])
+}
+
 // ---------------- 1行ぶんの Row ----------------
 fn target_row(t: &Target, scale: f64, history_width: usize) -> Row<'static> {
     let name_style = match t.up {
@@ -683,23 +699,8 @@ fn target_row(t: &Target, scale: f64, history_width: usize) -> Row<'static> {
     } else {
         Style::default()
     };
-    let rtt_cell = if matches!(t.up, Some(true)) {
-        format!("{:.1}", t.rtt)
-    } else {
-        "-".to_string()
-    };
-    let avg_cell = if t.snt > t.loss {
-        format!("{:.1}", t.avg())
-    } else {
-        "-".to_string()
-    };
-    // コメント（マークダウンパース対応）
-    let comment_cell = if let Some(ref c) = t.comment {
-        let spans = parse_markdown_spans(c);
-        Cell::from(Line::from(spans))
-    } else {
-        Cell::from("")
-    };
+    let rtt_cell = if matches!(t.up, Some(true)) { format!("{:.1}", t.rtt) } else { "-".to_string() };
+    let avg_cell = if t.snt > t.loss { format!("{:.1}", t.avg()) } else { "-".to_string() };
 
     Row::new(vec![
         Cell::from(t.name.clone()).style(name_style),
@@ -709,7 +710,6 @@ fn target_row(t: &Target, scale: f64, history_width: usize) -> Row<'static> {
         Cell::from(avg_cell),
         Cell::from(t.snt.to_string()),
         Cell::from(spark_line(&t.history, scale, history_width)),
-        comment_cell,
     ])
 }
 
@@ -749,35 +749,9 @@ fn run_ui(
                 chunks[0],
             );
 
-            let fixed: usize = 22 + 26 + 6 + 7 + 7 + 7 + 6 + 30; // コメント列分を追加
+            // 列幅: 22+1+26+1+6+1+7+1+7+1+7+1 = 81、残りがスパークライン
+            let fixed: usize = 81;
             let history_width = (chunks[1].width as usize).saturating_sub(fixed).max(10);
-
-            let header = Row::new(vec![
-                "HOSTNAME", "ADDRESS", "LOSS", "RTT", "AVG", "SNT", "HISTORY", "COMMENT",
-            ])
-            .style(Style::default().add_modifier(Modifier::BOLD));
-
-            let mut rows: Vec<Row> = Vec::new();
-            for (gi, g) in groups.iter().enumerate() {
-                if gi > 0 {
-                    rows.push(Row::new(vec![Cell::from(" ")])); // 区切りの空行
-                }
-                // グループラベル（マークダウンパース対応）
-                let label_spans = parse_markdown_spans(&g.label);
-                rows.push(Row::new(vec![
-                    Cell::from(Line::from(label_spans)).style(label_style(g.level))
-                ]));
-                // グループの説明（description があれば表示）
-                if let Some(ref desc) = g.description {
-                    let desc_spans = parse_markdown_spans(desc);
-                    rows.push(Row::new(vec![
-                        Cell::from(Line::from(desc_spans)).style(Style::default().add_modifier(Modifier::DIM))
-                    ]));
-                }
-                for &mi in &g.members {
-                    rows.push(target_row(&targets[mi], scale, history_width));
-                }
-            }
 
             let widths = [
                 Constraint::Length(22),
@@ -787,10 +761,73 @@ fn run_ui(
                 Constraint::Length(7),
                 Constraint::Length(7),
                 Constraint::Min(10),
-                Constraint::Length(30), // コメント列
             ];
-            let table = Table::new(rows, widths).header(header).column_spacing(1);
-            frame.render_widget(table, chunks[1]);
+
+            // 垂直レイアウトをグループ構造に合わせて動的に構築
+            let mut vc: Vec<Constraint> = vec![Constraint::Length(1)]; // ヘッダ行
+            for (gi, g) in groups.iter().enumerate() {
+                if gi > 0 { vc.push(Constraint::Length(1)); } // グループ間の空行
+                let h = 1
+                    + g.description.is_some() as u16
+                    + g.members.len() as u16;
+                vc.push(Constraint::Length(h));
+            }
+            vc.push(Constraint::Min(0)); // 余白
+            let vchunks = Layout::vertical(vc).split(chunks[1]);
+
+            // ヘッダ行（Paragraph で手動整形 → Table 列位置と一致）
+            frame.render_widget(Paragraph::new(header_line()), vchunks[0]);
+
+            // 各グループを描画
+            let mut ci = 1usize;
+            for (gi, g) in groups.iter().enumerate() {
+                if gi > 0 { ci += 1; } // 空行チャンクをスキップ
+                let group_area = vchunks[ci];
+                ci += 1;
+
+                // グループ内レイアウト: ラベル / 説明 / データ行
+                let has_desc = g.description.is_some();
+                let data_n = g.members.len() as u16;
+                let mut ic: Vec<Constraint> = vec![Constraint::Length(1)];
+                if has_desc { ic.push(Constraint::Length(1)); }
+                if data_n > 0 { ic.push(Constraint::Length(data_n)); }
+                ic.push(Constraint::Min(0));
+                let ich = Layout::vertical(ic).split(group_area);
+                let mut ii = 0usize;
+
+                // ラベル: 全幅 Paragraph → マークダウンが切り詰められない
+                frame.render_widget(
+                    Paragraph::new(
+                        Line::from(parse_markdown_spans(&g.label))
+                            .style(label_style(g.level))
+                    ),
+                    ich[ii],
+                );
+                ii += 1;
+
+                // 説明
+                if let Some(ref desc) = g.description {
+                    frame.render_widget(
+                        Paragraph::new(
+                            Line::from(parse_markdown_spans(desc))
+                                .style(Style::default().add_modifier(Modifier::DIM))
+                        ),
+                        ich[ii],
+                    );
+                    ii += 1;
+                }
+
+                // データ行: Table → 列幅は自動管理
+                if !g.members.is_empty() {
+                    let rows: Vec<Row> = g.members.iter()
+                        .map(|&mi| target_row(&targets[mi], scale, history_width))
+                        .collect();
+                    frame.render_widget(
+                        Table::new(rows, widths).column_spacing(1),
+                        ich[ii],
+                    );
+                }
+            }
         })?;
 
         // 3) 入力（タイムアウト付き）
